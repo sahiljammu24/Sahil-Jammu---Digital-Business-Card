@@ -108,9 +108,60 @@ export default function CustomerLookup() {
     }
   };
 
-  const currentBalance = customer 
-    ? customer.previous_balance - customer.payment_received 
-    : 0;
+  const calculateCurrentBalance = (customer: CustomerData | null): number => {
+    if (!customer) {
+      return 0;
+    }
+
+    const { customer_items, transactions, previous_balance, payment_received } = customer;
+
+    if (!transactions || transactions.length === 0) {
+      return Math.max(previous_balance - payment_received, 0);
+    }
+
+    const parsedTransactions = transactions
+      .map(tx => ({
+        ...tx,
+        date: new Date(tx.date),
+      }))
+      .sort((a, b) => a.date.getTime() - b.date.getTime());
+
+    const itemRents: { [key: string]: number } = {};
+    const currentItems: { [key: string]: number } = {};
+    customer_items.forEach(item => {
+      currentItems[item.item_name] = 0;
+    });
+
+    for (let i = 0; i < parsedTransactions.length; i++) {
+      const { date, item, qty } = parsedTransactions[i];
+
+      if (item in currentItems) {
+        currentItems[item] += qty;
+      }
+
+      if (i < parsedTransactions.length - 1) {
+        const nextDate = parsedTransactions[i + 1].date;
+        const timeDiff = nextDate.getTime() - date.getTime();
+        const days = Math.round(timeDiff / (1000 * 3600 * 24));
+
+        for (const itemName in currentItems) {
+          if (currentItems[itemName] > 0) {
+            const itemInfo = customer_items.find(ci => ci.item_name === itemName);
+            const itemRentPrice = itemInfo ? itemInfo.rate : 0;
+            const rentAmount = days * currentItems[itemName] * itemRentPrice;
+            itemRents[itemName] = (itemRents[itemName] || 0) + rentAmount;
+          }
+        }
+      }
+    }
+
+    const totalRent = Object.values(itemRents).reduce((sum, rent) => sum + rent, 0);
+    const grandTotal = totalRent + previous_balance - payment_received;
+
+    return Math.max(grandTotal, 0);
+  };
+
+  const currentBalance = calculateCurrentBalance(customer);
 
   return (
     <main className="min-h-screen p-4" style={{ background: 'var(--gradient-bg)' }}>
