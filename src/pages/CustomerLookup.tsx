@@ -1,11 +1,13 @@
 import { useState } from 'react';
-import { Search, ArrowLeft, Phone, MapPin, Calendar, CreditCard } from 'lucide-react';
+import { Search, ArrowLeft, Phone, MapPin, Calendar, CreditCard, Copy } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { QRCodeGenerator } from '@/components/QRCodeGenerator';
+import { Separator } from '@/components/ui/separator';
 
 interface CustomerData {
   id: string;
@@ -108,60 +110,9 @@ export default function CustomerLookup() {
     }
   };
 
-  const calculateCurrentBalance = (customer: CustomerData | null): number => {
-    if (!customer) {
-      return 0;
-    }
-
-    const { customer_items, transactions, previous_balance, payment_received } = customer;
-
-    if (!transactions || transactions.length === 0) {
-      return Math.max(previous_balance - payment_received, 0);
-    }
-
-    const parsedTransactions = transactions
-      .map(tx => ({
-        ...tx,
-        date: new Date(tx.date),
-      }))
-      .sort((a, b) => a.date.getTime() - b.date.getTime());
-
-    const itemRents: { [key: string]: number } = {};
-    const currentItems: { [key: string]: number } = {};
-    customer_items.forEach(item => {
-      currentItems[item.item_name] = 0;
-    });
-
-    for (let i = 0; i < parsedTransactions.length; i++) {
-      const { date, item, qty } = parsedTransactions[i];
-
-      if (item in currentItems) {
-        currentItems[item] += qty;
-      }
-
-      if (i < parsedTransactions.length - 1) {
-        const nextDate = parsedTransactions[i + 1].date;
-        const timeDiff = nextDate.getTime() - date.getTime();
-        const days = Math.round(timeDiff / (1000 * 3600 * 24));
-
-        for (const itemName in currentItems) {
-          if (currentItems[itemName] > 0) {
-            const itemInfo = customer_items.find(ci => ci.item_name === itemName);
-            const itemRentPrice = itemInfo ? itemInfo.rate : 0;
-            const rentAmount = days * currentItems[itemName] * itemRentPrice;
-            itemRents[itemName] = (itemRents[itemName] || 0) + rentAmount;
-          }
-        }
-      }
-    }
-
-    const totalRent = Object.values(itemRents).reduce((sum, rent) => sum + rent, 0);
-    const grandTotal = totalRent + previous_balance - payment_received;
-
-    return Math.max(grandTotal, 0);
-  };
-
-  const currentBalance = calculateCurrentBalance(customer);
+  const currentBalance = customer 
+    ? customer.previous_balance - customer.payment_received 
+    : 0;
 
   return (
     <main className="min-h-screen p-4" style={{ background: 'var(--gradient-bg)' }}>
@@ -233,6 +184,52 @@ export default function CustomerLookup() {
                 </div>
               </div>
             </Card>
+
+            {/* UPI Payment */}
+            {currentBalance > 0 && (
+                            <Card className="glass-card p-6">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-xl font-semibold">Pay with UPI</h3>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-mono bg-muted px-2 py-1 rounded">sp9793893@okaxis</span>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => {
+                        navigator.clipboard.writeText('sp9793893@okaxis');
+                        toast({ title: "UPI ID Copied!" });
+                      }}
+                    >
+                      <Copy className="w-4 h-4" />
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="flex flex-col items-center gap-4">
+                  <div className="p-4 bg-white rounded-lg">
+                    <QRCodeGenerator
+                      url={`upi://pay?pa=sp9793893@okaxis&pn=${encodeURIComponent(customer.name)}&am=${currentBalance}&cu=INR`}
+                      size={160}
+                    />
+                  </div>
+                  <p className="text-sm text-muted-foreground text-center">
+                    Scan the QR code with your favorite UPI app
+                  </p>
+                  
+                  <Separator className="my-2" />
+
+                  <a
+                    href={`upi://pay?pa=sp9793893@okaxis&pn=${encodeURIComponent(customer.name)}&am=${currentBalance}&cu=INR`}
+                    className="w-full"
+                  >
+                    <Button className="w-full text-lg py-6">
+                      <CreditCard className="w-5 h-5 mr-3" />
+                      Pay ₹{currentBalance.toLocaleString()} Now
+                    </Button>
+                  </a>
+                </div>
+              </Card>
+            )}
 
             {/* Payment History */}
             <Card className="glass-card p-6">
