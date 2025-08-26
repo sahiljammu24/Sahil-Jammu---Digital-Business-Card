@@ -110,9 +110,65 @@ export default function CustomerLookup() {
     }
   };
 
-  const currentBalance = customer 
-    ? customer.previous_balance - customer.payment_received 
-    : 0;
+  const calculateCustomerDueFromData = (customerData: CustomerData | null): number => {
+    if (!customerData) {
+      return 0;
+    }
+
+    const { items, transactions, previous_balance, payment_received } = {
+      items: customerData.customer_items.map(item => [item.item_name, item.rate]),
+      transactions: customerData.transactions.map(tx => ({
+        date: tx.date,
+        item: tx.item,
+        qty: tx.qty,
+        rent: tx.rent,
+      })),
+      previous_balance: customerData.previous_balance,
+      payment_received: customerData.payment_received,
+    };
+
+    if (!transactions || transactions.length === 0) {
+      const balance = previous_balance - payment_received;
+      return Math.max(balance, 0);
+    }
+
+    const sortedTrans = [...transactions]
+      .map(tx => ({ ...tx, date: new Date(tx.date) }))
+      .sort((a, b) => a.date.getTime() - b.date.getTime());
+
+    const itemRents: { [key: string]: number } = {};
+    const currentItems: { [key: string]: number } = Object.fromEntries(items.map(item => [item[0], 0]));
+
+    for (let i = 0; i < sortedTrans.length; i++) {
+      const { date, item, qty } = sortedTrans[i];
+      if (item in currentItems) {
+        currentItems[item] += qty;
+      } else {
+        continue;
+      }
+
+      if (i < sortedTrans.length - 1) {
+        const nextDate = sortedTrans[i + 1].date;
+        const days = Math.round((nextDate.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
+
+        for (const [itemName, count] of Object.entries(currentItems)) {
+          if (count > 0) {
+            const itemData = items.find(it => it[0] === itemName);
+            const itemRentPrice = itemData ? itemData[1] : 0;
+            const rentAmount = days * count * itemRentPrice;
+            itemRents[itemName] = (itemRents[itemName] || 0) + rentAmount;
+          }
+        }
+      }
+    }
+
+    const totalRent = Object.values(itemRents).reduce((sum, rent) => sum + rent, 0);
+    const grandTotal = totalRent + previous_balance - payment_received;
+
+    return Math.max(grandTotal, 0);
+  };
+
+  const currentBalance = calculateCustomerDueFromData(customer);
 
   return (
     <main className="min-h-screen p-4" style={{ background: 'var(--gradient-bg)' }}>
