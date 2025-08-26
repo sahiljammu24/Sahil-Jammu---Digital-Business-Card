@@ -138,11 +138,13 @@ export default function CustomerLookup() {
 
     const itemRents: { [key: string]: number } = {};
     const currentItems: { [key: string]: number } = Object.fromEntries(items.map(item => [item[0], 0]));
+    const lastTransactionDate: { [key: string]: Date } = {};
 
     for (let i = 0; i < sortedTrans.length; i++) {
       const { date, item, qty } = sortedTrans[i];
       if (item in currentItems) {
         currentItems[item] += qty;
+        lastTransactionDate[item] = date;
       } else {
         continue;
       }
@@ -158,6 +160,20 @@ export default function CustomerLookup() {
             const rentAmount = days * count * itemRentPrice;
             itemRents[itemName] = (itemRents[itemName] || 0) + rentAmount;
           }
+        }
+      }
+    }
+
+    const today = new Date();
+    for (const [itemName, count] of Object.entries(currentItems)) {
+      if (count > 0) {
+        const lastDate = lastTransactionDate[itemName];
+        if (lastDate) {
+          const days = Math.round((today.getTime() - lastDate.getTime()) / (1000 * 60 * 60 * 24));
+          const itemData = items.find(it => it[0] === itemName);
+          const itemRentPrice = itemData ? itemData[1] : 0;
+          const rentAmount = days * count * itemRentPrice;
+          itemRents[itemName] = (itemRents[itemName] || 0) + rentAmount;
         }
       }
     }
