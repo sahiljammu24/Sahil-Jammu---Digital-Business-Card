@@ -10,6 +10,8 @@ import { CustomerForm } from './CustomerForm';
 import { CustomerItemManager } from './CustomerItemManager';
 import { TransactionManager } from './TransactionManager';
 
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+
 interface Customer {
   id: string;
   customer_id: string;
@@ -114,8 +116,7 @@ export function CustomerManager() {
         <Dialog open={isFormDialogOpen} onOpenChange={setIsFormDialogOpen}>
           <DialogTrigger asChild>
             <Button onClick={() => setSelectedCustomer(null)}>
-              <Plus className="w-4 h-4 mr-2" />
-              Add Customer
+              <Plus className="w-4 h-4" />
             </Button>
           </DialogTrigger>
           <DialogContent className="max-w-2xl">
@@ -139,66 +140,76 @@ export function CustomerManager() {
           </Card>
         ) : (
           filteredCustomers.map((customer) => (
-            <Card key={customer.id} className="p-4">
-              <div className="flex justify-between items-start">
-                <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-1">
+            <Collapsible key={customer.id} asChild>
+              <Card>
+                <CollapsibleTrigger asChild>
+                  <div className="p-4 flex justify-between items-center cursor-pointer">
                     <h3 className="font-semibold text-lg">{customer.name}</h3>
-                    <span className="text-sm bg-primary/10 text-primary px-2 py-1 rounded">
-                      {customer.customer_id}
-                    </span>
-                  </div>
-                  <p className="text-muted-foreground mb-2">{customer.mobile}</p>
-                  <p className="text-sm text-muted-foreground mb-2">{customer.address}</p>
-                  <div className="flex gap-4 text-sm">
-                    <span>Balance: ₹{customer.previous_balance.toLocaleString()}</span>
-                    <span>Paid: ₹{customer.payment_received.toLocaleString()}</span>
                     <span className={`font-medium ${(customer.previous_balance - customer.payment_received) > 0 ? 'text-red-600' : 'text-green-600'}`}>
-                      Due: ₹{(customer.previous_balance - customer.payment_received).toLocaleString()}
+                      ₹{(customer.previous_balance - customer.payment_received).toLocaleString()}
                     </span>
                   </div>
-                </div>
-                <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      setSelectedCustomer(customer);
-                      setIsTransactionManagerOpen(true);
-                    }}
-                  >
-                    <History className="w-4 h-4" />
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      setSelectedCustomer(customer);
-                      setIsItemManagerOpen(true);
-                    }}
-                  >
-                    <ShoppingCart className="w-4 h-4" />
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      setSelectedCustomer(customer);
-                      setIsFormDialogOpen(true);
-                    }}
-                  >
-                    <Edit2 className="w-4 h-4" />
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleDelete(customer.id)}
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </Button>
-                </div>
-              </div>
-            </Card>
+                </CollapsibleTrigger>
+                <CollapsibleContent>
+                  <div className="p-4 border-t">
+                    <div className="flex justify-between items-start">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-sm bg-primary/10 text-primary px-2 py-1 rounded">
+                            {customer.customer_id}
+                          </span>
+                        </div>
+                        <p className="text-muted-foreground mb-2">{customer.mobile}</p>
+                        <p className="text-sm text-muted-foreground mb-2">{customer.address}</p>
+                        <div className="flex gap-4 text-sm">
+                          <span>Balance: ₹{customer.previous_balance.toLocaleString()}</span>
+                          <span>Paid: ₹{customer.payment_received.toLocaleString()}</span>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setSelectedCustomer(customer);
+                            setIsTransactionManagerOpen(true);
+                          }}
+                        >
+                          <History className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setSelectedCustomer(customer);
+                            setIsItemManagerOpen(true);
+                          }}
+                        >
+                          <ShoppingCart className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setSelectedCustomer(customer);
+                            setIsFormDialogOpen(true);
+                          }}
+                        >
+                          <Edit2 className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleDelete(customer.id)}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                </CollapsibleContent>
+              </Card>
+            </Collapsible>
           ))
         )}
       </div>

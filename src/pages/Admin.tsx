@@ -9,6 +9,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { CustomerManager } from '@/components/admin/CustomerManager';
 import { BusinessCardEditor } from '@/components/admin/BusinessCardEditor';
 import { useNavigate } from 'react-router-dom';
+import NotFound from './NotFound';
 import { Label } from '@/components/ui/label';
 import {
   Sidebar,
@@ -33,10 +34,22 @@ export default function Admin() {
   const [activeTab, setActiveTab] = useState('customers'); // State to manage active tab
   const { toast } = useToast();
   const navigate = useNavigate();
+  const [isAuthorized, setIsAuthorized] = useState<boolean | null>(null);
 
   useEffect(() => {
-    fetchBusinessCardSettings();
+    const isAuthenticated = sessionStorage.getItem('isAdminAuthenticated');
+    if (isAuthenticated === 'true') {
+      setIsAuthorized(true);
+    } else {
+      setIsAuthorized(false);
+    }
   }, []);
+
+  useEffect(() => {
+    if (isAuthorized) {
+      fetchBusinessCardSettings();
+    }
+  }, [isAuthorized]);
 
   const fetchBusinessCardSettings = async () => {
     try {
@@ -197,6 +210,21 @@ export default function Admin() {
     }
   };
 
+  if (isAuthorized === null) {
+    return (
+      <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--gradient-bg)' }}>
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+          <p>Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (isAuthorized === false) {
+    return <NotFound />;
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--gradient-bg)' }}>
@@ -246,7 +274,7 @@ export default function Admin() {
           </SidebarMenu>
         </SidebarContent>
         <SidebarFooter>
-          <Button variant="outline" onClick={() => navigate('/admin')} className="w-full">
+          <Button variant="outline" onClick={() => navigate('/admin-login')} className="w-full">
             <LogOut className="w-4 h-4 mr-2" />
             Log Out
           </Button>
@@ -266,9 +294,8 @@ export default function Admin() {
                   <h2 className="text-2xl font-semibold">Customer Management</h2>
                   <div className="flex gap-2">
                     <Button variant="outline" onClick={() => document.getElementById('file-input')?.click()}>
-                      <Upload className="w-4 h-4 mr-2" />
-                      Import JSON
-                    </Button>
+                  <Upload className="w-4 h-4" />
+                </Button>
                     <input
                       id="file-input"
                       type="file"

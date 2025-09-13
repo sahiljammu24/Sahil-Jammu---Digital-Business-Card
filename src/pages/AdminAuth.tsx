@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Navigate, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -8,22 +8,18 @@ import { ArrowLeft } from 'lucide-react';
 
 const AdminAuth = () => {
   const [password, setPassword] = useState('');
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const navigate = useNavigate();
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const adminPassword = import.meta.env.VITE_ADMIN_PASSWORD || 'password';
     if (password === adminPassword) {
-      setIsAuthenticated(true);
+      sessionStorage.setItem('isAdminAuthenticated', 'true');
+      navigate('/admin-panel');
     } else {
       alert('Incorrect password');
     }
   };
-
-  if (isAuthenticated) {
-    return <Navigate to="/admin-panel" />;
-  }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-100 dark:bg-gray-900">

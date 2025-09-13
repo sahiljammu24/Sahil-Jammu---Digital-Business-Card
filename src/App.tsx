@@ -19,6 +19,7 @@ const App = () => (
       <BrowserRouter>
         <Routes>
           <Route path="/" element={<Index />} />
+          
           <Route path="/admin" element={<AdminAuth />} />
           <Route path="/admin-panel" element={<Admin />} />
           <Route path="/customer-lookup" element={<CustomerLookup />} />
