@@ -20,6 +20,8 @@ interface Customer {
   address: string;
   previous_balance: number;
   payment_received: number;
+  customer_items: Array<{ item_name: string; rate: number; }>;
+  transactions: Array<{ date: string; item: string; qty: number; rent: number; }>;
 }
 
 export function CustomerManager() {
@@ -37,23 +39,45 @@ export function CustomerManager() {
   }, []);
 
   const fetchCustomers = async () => {
+    setLoading(true);
     try {
-      const { data, error } = await supabase
-        .from('customers')
-        .select('*')
-        .order('created_at', { ascending: false });
+        const { data: customersData, error } = await supabase
+            .from('customers')
+            .select('*')
+            .order('created_at', { ascending: false });
 
-      if (error) throw error;
-      setCustomers(data || []);
+        if (error) throw error;
+
+        const detailedCustomers = await Promise.all(
+            customersData.map(async (customer) => {
+                const { data: customer_items } = await supabase
+                    .from('customer_items')
+                    .select('item_name, rate')
+                    .eq('customer_id', customer.id);
+
+                const { data: transactions } = await supabase
+                    .from('transactions')
+                    .select('date, item, qty, rent')
+                    .eq('customer_id', customer.id);
+
+                return {
+                    ...customer,
+                    customer_items: customer_items || [],
+                    transactions: transactions || [],
+                };
+            })
+        );
+
+        setCustomers(detailedCustomers);
     } catch (error) {
-      console.error('Error fetching customers:', error);
-      toast({
-        title: "Error",
-        description: "Failed to fetch customers",
-        variant: "destructive"
-      });
+        console.error('Error fetching customers:', error);
+        toast({
+            title: "Error",
+            description: "Failed to fetch detailed customer data",
+            variant: "destructive"
+        });
     } finally {
-      setLoading(false);
+        setLoading(false);
     }
   };
 
@@ -93,6 +117,69 @@ export function CustomerManager() {
     setIsFormDialogOpen(false);
     setSelectedCustomer(null);
     fetchCustomers();
+  };
+
+  const calculateCustomerDueFromData = (customer: Customer | null): number => {
+    if (!customer) {
+      return 0;
+    }
+
+    const { customer_items, transactions, previous_balance, payment_received } = customer;
+
+    if (!transactions || transactions.length === 0) {
+      const balance = previous_balance - payment_received;
+      return Math.max(balance, 0);
+    }
+
+    const sortedTrans = [...transactions]
+      .map(tx => ({ ...tx, date: new Date(tx.date) }))
+      .sort((a, b) => a.date.getTime() - b.date.getTime());
+
+    let totalRent = 0;
+    const currentItems: { [key: string]: number } = {};
+    customer_items.forEach(item => {
+        currentItems[item.item_name] = 0;
+    });
+
+    let lastDate = sortedTrans[0].date;
+
+    for (const transaction of sortedTrans) {
+        const currentDate = transaction.date;
+        const days = Math.max(0, Math.round((currentDate.getTime() - lastDate.getTime()) / (1000 * 60 * 60 * 24)));
+
+        if (days > 0) {
+            for (const [itemName, count] of Object.entries(currentItems)) {
+                if (count > 0) {
+                    const itemData = customer_items.find(it => it.item_name === itemName);
+                    const itemRentPrice = itemData ? itemData.rate : 0;
+                    totalRent += days * count * itemRentPrice;
+                }
+            }
+        }
+
+        if (transaction.item in currentItems) {
+            currentItems[transaction.item] += transaction.qty;
+        }
+        lastDate = currentDate;
+    }
+
+    // Calculate rent from the last transaction to today
+    const today = new Date();
+    const daysSinceLastTx = Math.max(0, Math.round((today.getTime() - lastDate.getTime()) / (1000 * 60 * 60 * 24)));
+
+    if (daysSinceLastTx > 0) {
+        for (const [itemName, count] of Object.entries(currentItems)) {
+            if (count > 0) {
+                const itemData = customer_items.find(it => it.item_name === itemName);
+                const itemRentPrice = itemData ? itemData.rate : 0;
+                totalRent += daysSinceLastTx * count * itemRentPrice;
+            }
+        }
+    }
+
+    const grandTotal = totalRent + previous_balance - payment_received;
+
+    return Math.max(grandTotal, 0);
   };
 
   if (loading) {
@@ -145,8 +232,8 @@ export function CustomerManager() {
                 <CollapsibleTrigger asChild>
                   <div className="p-4 flex justify-between items-center cursor-pointer">
                     <h3 className="font-semibold text-lg">{customer.name}</h3>
-                    <span className={`font-medium ${(customer.previous_balance - customer.payment_received) > 0 ? 'text-red-600' : 'text-green-600'}`}>
-                      ₹{(customer.previous_balance - customer.payment_received).toLocaleString()}
+                    <span className={`font-medium ${calculateCustomerDueFromData(customer) > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                      ₹{calculateCustomerDueFromData(customer).toLocaleString()}
                     </span>
                   </div>
                 </CollapsibleTrigger>

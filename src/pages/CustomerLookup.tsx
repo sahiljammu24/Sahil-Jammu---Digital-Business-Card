@@ -42,6 +42,7 @@ interface CustomerData {
 export default function CustomerLookup() {
   const [customerId, setCustomerId] = useState('');
   const [customer, setCustomer] = useState<CustomerData | null>(null);
+  const [currentBalance, setCurrentBalance] = useState(0);
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -108,12 +109,15 @@ export default function CustomerLookup() {
         .eq('customer_id', customerData.id)
         .order('date', { ascending: false });
 
-      setCustomer({
+      const customerWithDetails = {
         ...customerData,
         payment_history: paymentHistory || [],
         customer_items: customerItems || [],
         transactions: transactions || []
-      });
+      };
+
+      setCustomer(customerWithDetails);
+      setCurrentBalance(calculateCustomerDueFromData(customerWithDetails));
 
     } catch (error) {
       toast({
@@ -131,17 +135,7 @@ export default function CustomerLookup() {
       return 0;
     }
 
-    const { items, transactions, previous_balance, payment_received } = {
-      items: customerData.customer_items.map(item => [item.item_name, item.rate]),
-      transactions: customerData.transactions.map(tx => ({
-        date: tx.date,
-        item: tx.item,
-        qty: tx.qty,
-        rent: tx.rent,
-      })),
-      previous_balance: customerData.previous_balance,
-      payment_received: customerData.payment_received,
-    };
+    const { customer_items, transactions, previous_balance, payment_received } = customerData;
 
     if (!transactions || transactions.length === 0) {
       const balance = previous_balance - payment_received;
@@ -152,55 +146,90 @@ export default function CustomerLookup() {
       .map(tx => ({ ...tx, date: new Date(tx.date) }))
       .sort((a, b) => a.date.getTime() - b.date.getTime());
 
-    const itemRents: { [key: string]: number } = {};
-    const currentItems: { [key: string]: number } = Object.fromEntries(items.map(item => [item[0], 0]));
-    const lastTransactionDate: { [key: string]: Date } = {};
+    let totalRent = 0;
+    const currentItems: { [key: string]: number } = {};
+    customer_items.forEach(item => {
+        currentItems[item.item_name] = 0;
+    });
 
-    for (let i = 0; i < sortedTrans.length; i++) {
-      const { date, item, qty } = sortedTrans[i];
-      if (item in currentItems) {
-        currentItems[item] += qty;
-        lastTransactionDate[item] = date;
-      } else {
-        continue;
-      }
+    let lastDate = sortedTrans[0].date;
 
-      if (i < sortedTrans.length - 1) {
-        const nextDate = sortedTrans[i + 1].date;
-        const days = Math.round((nextDate.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
+    for (const transaction of sortedTrans) {
+        const currentDate = transaction.date;
+        const days = Math.max(0, Math.round((currentDate.getTime() - lastDate.getTime()) / (1000 * 60 * 60 * 24)));
 
-        for (const [itemName, count] of Object.entries(currentItems)) {
-          if (count > 0) {
-            const itemData = items.find(it => it[0] === itemName);
-            const itemRentPrice = itemData ? itemData[1] : 0;
-            const rentAmount = days * count * itemRentPrice;
-            itemRents[itemName] = (itemRents[itemName] || 0) + rentAmount;
-          }
+        if (days > 0) {
+            for (const [itemName, count] of Object.entries(currentItems)) {
+                if (count > 0) {
+                    const itemData = customer_items.find(it => it.item_name === itemName);
+                    const itemRentPrice = itemData ? itemData.rate : 0;
+                    totalRent += days * count * itemRentPrice;
+                }
+            }
         }
-      }
+
+        if (transaction.item in currentItems) {
+            currentItems[transaction.item] += transaction.qty;
+        }
+        lastDate = currentDate;
     }
 
+    // Calculate rent from the last transaction to today
     const today = new Date();
-    for (const [itemName, count] of Object.entries(currentItems)) {
-      if (count > 0) {
-        const lastDate = lastTransactionDate[itemName];
-        if (lastDate) {
-          const days = Math.round((today.getTime() - lastDate.getTime()) / (1000 * 60 * 60 * 24));
-          const itemData = items.find(it => it[0] === itemName);
-          const itemRentPrice = itemData ? itemData[1] : 0;
-          const rentAmount = days * count * itemRentPrice;
-          itemRents[itemName] = (itemRents[itemName] || 0) + rentAmount;
+    const daysSinceLastTx = Math.max(0, Math.round((today.getTime() - lastDate.getTime()) / (1000 * 60 * 60 * 24)));
+
+    if (daysSinceLastTx > 0) {
+        for (const [itemName, count] of Object.entries(currentItems)) {
+            if (count > 0) {
+                const itemData = customer_items.find(it => it.item_name === itemName);
+                const itemRentPrice = itemData ? itemData.rate : 0;
+                totalRent += daysSinceLastTx * count * itemRentPrice;
+            }
         }
-      }
     }
 
-    const totalRent = Object.values(itemRents).reduce((sum, rent) => sum + rent, 0);
     const grandTotal = totalRent + previous_balance - payment_received;
 
     return Math.max(grandTotal, 0);
   };
 
-  const currentBalance = calculateCustomerDueFromData(customer);
+  const shareDetails = async () => {
+    if (!customer) return;
+
+    const currentBalance = calculateCustomerDueFromData(customer);
+    const shareUrl = `${window.location.origin}/customer-lookup/${urlCustomerId || customerId}`;
+    const text = `
+      Customer: ${customer.name}\n
+      Mobile: ${customer.mobile}\n
+      Address: ${customer.address}\n
+      --------------------
+
+      Previous Balance: ₹${customer.previous_balance.toLocaleString()}\n
+      Payment Received: ₹${customer.payment_received.toLocaleString()}\n
+      Current Balance: ₹${currentBalance.toLocaleString()}\n
+      --------------------
+
+      Thanks for your business!\n
+      Jammu Shuttering Store
+
+          Link: ${shareUrl}
+        
+
+    `;
+
+    if (navigator.share) {
+      try {
+        await navigator.share({ text, url: shareUrl });
+        toast({ title: "Details Shared Successfully!" });
+      } catch (error) {
+        console.error('Error sharing:', error);
+        toast({ title: "Error Sharing Details", variant: "destructive" });
+      }
+    } else {
+      navigator.clipboard.writeText(text);
+      toast({ title: "Details Copied to Clipboard!" });
+    }
+  };
 
   return (
     <main className="min-h-screen p-4" style={{ background: 'var(--gradient-bg)' }}>
@@ -245,7 +274,10 @@ export default function CustomerLookup() {
           <div className="space-y-6">
             {/* Customer Info */}
             <Card className="glass-card p-6">
-              <h2 className="text-2xl font-bold mb-4">{customer.name}</h2>
+              <div className="flex justify-between items-center">
+                <h2 className="text-2xl font-bold mb-4">{customer.name}</h2>
+                <Button onClick={shareDetails} variant="outline">Share Details</Button>
+              </div>
               <div className="grid md:grid-cols-2 gap-4">
                 <div className="flex items-center gap-2">
                   <Phone className="w-5 h-5 text-primary" />
